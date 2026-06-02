@@ -1,0 +1,747 @@
+#include <iostream>
+#include <string>
+#include <fstream>	// Necesario para el manejo de archivos (Persistencia)
+#include <sstream> // Agregado para garantizar estabilidad en conversiones de texto
+
+using namespace std;
+
+// ============================================================================
+// DEFINICIÓN DE LAS ESTRUCTURAS DE DATOS (NODO DINÁMICOS)
+// ============================================================================
+
+// Estructura lineal para el Gestor de Procesos (Lista Enlazada Simple)
+struct NodoProceso {
+    int id;                     // Identificador único del proceso (Llave Primaria)
+    string nombre;              // Etiqueta identificativa del proceso
+    int prioridad;              // Nivel de urgencia (Escala del 1 al 5)
+    string estado;              // Estado de ciclo de vida (Activo/Inactivo)
+    NodoProceso* siguiente;     // Puntero autorreferencial al siguiente nodo
+};
+
+// Estructura para el Planificador de CPU (Cola de Prioridad)
+struct NodoCola {
+    int idProceso;              // Copia del ID del proceso de origen
+    string nombre;              // Nombre del proceso en ejecución
+    int prioridad;              // Criterio de ordenamiento de la cola (Mayor a Menor)
+    NodoCola* siguiente;        // Puntero de enlace al elemento posterior de la cola
+};
+
+// Estructura no contigua para el Gestor de Memoria (Pila / Stack LIFO)
+struct NodoPila {
+    int idProceso;              // ID del proceso asignatario del bloque de memoria
+    int tamanoBloque;           // Dimensión del espacio reservado en Kilobytes (KB)
+    NodoPila* anterior;         // Puntero autorreferencial al nodo inferior de la pila (Base)
+};
+
+// ============================================================================
+// MÓDULO 1: GESTOR DE PROCESOS (LISTA ENLAZADA SIMPLE)
+// ============================================================================
+
+/**
+ * RF-01: Inserción de un nuevo proceso al final de la lista.
+ * Incluye verificación de unicidad de ID para evitar duplicidad de llaves.
+ */
+void insertarProceso(NodoProceso*& cabeza, int id, string nombre, int prioridad) {
+    // 1. Validar si el ID ya existe recorriendo la lista completa
+    NodoProceso* temp = cabeza;
+    while (temp != NULL) {
+        if (temp->id == id) {
+            cout << "[ERROR] El ID " << id << " ya pertenece a otro proceso registrado.\n";
+            return; // Interrumpe la inserción si el ID está duplicado
+        }
+        temp = temp->siguiente;
+    }
+
+    // 2. Instanciar y asignar valores al nuevo nodo en memoria Heap
+    NodoProceso* nuevo = new NodoProceso();
+    nuevo->id = id;
+    nuevo->nombre = nombre;
+    nuevo->prioridad = prioridad;
+    nuevo->estado = "Activo";
+    nuevo->siguiente = NULL; // Por ser el último nodo, apunta a NULL
+
+    // 3. Insertar en la estructura según el estado de la cabeza
+    if (cabeza == NULL) {
+        cabeza = nuevo; // Si la lista está vacía, se convierte en el nodo inicial
+    } else {
+        NodoProceso* actual = cabeza;
+        while (actual->siguiente != NULL) {
+            actual = actual->siguiente; // Desplazamiento hasta el último nodo existente
+        }
+        actual->siguiente = nuevo; // Enlace del último nodo con el nuevo elemento
+    }
+    cout << "[OK] Proceso '" << nombre << "' registrado con exito.\n";
+}
+
+/**
+ * RF-02: Eliminación física de un nodo mediante coincidencia de ID.
+ * Implementa el algoritmo estándar de remoción reajustando punteros.
+ */
+void eliminarProcesoPorID(NodoProceso*& cabeza, int id) {
+    if (cabeza == NULL) {
+        cout << "[ERROR] La lista de procesos esta vacia.\n";
+        return;
+    }
+
+    NodoProceso* actual = cabeza;
+    NodoProceso* anterior = NULL;
+
+    // Búsqueda del nodo objetivo manteniendo el rastro del nodo previo
+    while (actual != NULL && actual->id != id) {
+        anterior = actual;
+        actual = actual->siguiente;
+    }
+
+    if (actual == NULL) {
+        cout << "[ERROR] No se encontro el proceso con ID: " << id << "\n";
+        return;
+    }
+
+    // Reajuste de enlaces lógicos según la posición del elemento hallado
+    if (anterior == NULL) {
+        cabeza = cabeza->siguiente; // El elemento a eliminar era el primero (Cabeza)
+    } else {
+        anterior->siguiente = actual->siguiente; // Salta el nodo actual reconectando la lista
+    }
+
+    delete actual; // Liberación de la memoria asignada al nodo
+    cout << "[OK] Proceso con ID " << id << " eliminado correctamente.\n";
+}
+
+/**
+ * RF-02 EXTRA: Eliminación de un proceso mediante coincidencia de Nombre.
+ * Si existen nombres duplicados, eliminará la primera coincidencia que encuentre en la lista.
+ */
+void eliminarProcesoPorNombre(NodoProceso*& cabeza, string nombre) {
+    if (cabeza == NULL) {
+        cout << "[ERROR] La lista de procesos esta vacia.\n";
+        return;
+    }
+
+    NodoProceso* actual = cabeza;
+    NodoProceso* anterior = NULL;
+
+    // Búsqueda secuencial comparando cadenas de texto (Strings)
+    while (actual != NULL && actual->nombre != nombre) {
+        anterior = actual;
+        actual = actual->siguiente;
+    }
+
+    if (actual == NULL) {
+        cout << "[ERROR] No se encontro el proceso con nombre: " << nombre << "\n";
+        return;
+    }
+
+    if (anterior == NULL) {
+        cabeza = cabeza->siguiente; // Desplazamiento de cabecera
+    } else {
+        anterior->siguiente = actual->siguiente; // Puenteo lógico
+    }
+
+    delete actual; // Limpieza de memoria analógica
+    cout << "[OK] Proceso '" << nombre << "' eliminado correctamente.\n";
+}
+
+/**
+ * RF-03: Búsqueda lineal secuencial por ID de proceso.
+ */
+void buscarProcesoPorID(NodoProceso* cabeza, int id) {
+    NodoProceso* actual = cabeza;
+    while (actual != NULL) {
+        if (actual->id == id) {
+            cout << "\n--- PROCESO ENCONTRADO (POR ID) ---\n";
+            cout << "ID: " << actual->id << "\n";
+            cout << "Nombre: " << actual->nombre << "\n";
+            cout << "Prioridad: " << actual->prioridad << " (1:Baja - 5:Critica)\n";
+            cout << "Estado: " << actual->estado << "\n";
+            return; // Finaliza tras localizar el registro único
+        }
+        actual = actual->siguiente;
+    }
+    cout << "[ERROR] Proceso con ID " << id << " no registrado.\n";
+}
+
+/**
+ * RF-03 EXTRA: Búsqueda por coincidencia de cadena en campo Nombre.
+ * Diseñado para mostrar múltiples resultados concurrentes si comparten nombre.
+ */
+void buscarProcesoPorNombre(NodoProceso* cabeza, string nombreBusqueda) {
+    NodoProceso* actual = cabeza;
+    bool encontrado = false;
+    
+    while (actual != NULL) {
+        if (actual->nombre == nombreBusqueda) {
+            cout << "\n--- PROCESO ENCONTRADO (POR NOMBRE) ---\n";
+            cout << "ID: " << actual->id << "\n";
+            cout << "Nombre: " << actual->nombre << "\n";
+            cout << "Prioridad: " << actual->prioridad << " (1:Baja - 5:Critica)\n";
+            cout << "Estado: " << actual->estado << "\n";
+            encontrado = true;
+        }
+        actual = actual->siguiente;
+    }
+    
+    if (!encontrado) {
+        cout << "[ERROR] No se encontraron procesos con el nombre '" << nombreBusqueda << "'.\n";
+    }
+}
+
+/**
+ * RF-04: Modificación del atributo de Prioridad en tiempo de ejecución.
+ */
+void modificarPrioridad(NodoProceso* cabeza, int id, int nuevaPrioridad) {
+    NodoProceso* actual = cabeza;
+    while (actual != NULL) {
+        if (actual->id == id) {
+            actual->prioridad = nuevaPrioridad; // Actualización directa en memoria
+            cout << "[OK] Prioridad del proceso ID " << id << " cambiada a " << nuevaPrioridad << ".\n";
+            return;
+        }
+        actual = actual->siguiente;
+    }
+    cout << "[ERROR] No se pudo modificar. ID no encontrado.\n";
+}
+
+/**
+ * RF-05: Recorrido y visualización de la lista de procesos con acumulador analítico.
+ */
+void listarProcesos(NodoProceso* cabeza) {
+    if (cabeza == NULL) {
+        cout << "\n[AVISO] No hay procesos registrados en el sistema.\n";
+        return;
+    }
+    cout << "\n=============================================\n";
+    cout << "        LISTA COMPLETA DE PROCESOS          \n";
+    cout << "=============================================\n";
+    NodoProceso* actual = cabeza;
+    int contador = 0; // Registro acumulativo de nodos procesados
+    
+    while (actual != NULL) {
+        cout << "ID: " << actual->id 
+             << " | Nombre: " << actual->nombre 
+             << " | Prioridad: " << actual->prioridad 
+             << " | Estado: " << actual->estado << "\n";
+        actual = actual->siguiente;
+        contador++; // Incremento por cada nodo visitado
+    }
+    cout << "---------------------------------------------\n";
+    cout << " Total de procesos registrados: " << contador << "\n";
+    cout << "---------------------------------------------\n";
+}
+
+// ============================================================================
+// MÓDULO 2: PLANIFICADOR DE CPU (COLA DE PRIORIDAD)
+// ============================================================================
+
+/**
+ * RF-06: Inserción ordenada según prioridad (Mayor prioridad a menor prioridad).
+ * Incorpora un filtro de control "en caliente" para evitar duplicados en ejecución.
+ */
+void encolarPrioridad(NodoCola*& frente, int id, string nombre, int prioridad) {
+    // Evitar que el mismo ID esté encolado de forma simultánea en la CPU
+    NodoCola* chequear = frente;
+    while (chequear != NULL) {
+        if (chequear->idProceso == id) {
+            cout << "[ERROR] El proceso ID " << id << " ya esta en la cola de espera de la CPU.\n";
+            return;
+        }
+        chequear = chequear->siguiente;
+    }
+
+    NodoCola* nuevo = new NodoCola();
+    nuevo->idProceso = id;
+    nuevo->nombre = nombre;
+    nuevo->prioridad = prioridad;
+    nuevo->siguiente = NULL;
+
+    // Algoritmo de ordenamiento al insertar (Caso Especial: Primer elemento o mayor prioridad absoluta)
+    if (frente == NULL || prioridad > frente->prioridad) {
+        nuevo->siguiente = frente;
+        frente = nuevo; // El nuevo nodo toma el control frontal de la cola
+    } else {
+        // Desplazamiento condicional: Localizar la posición exacta según el nivel de jerarquía
+        NodoCola* actual = frente;
+        while (actual->siguiente != NULL && actual->siguiente->prioridad >= prioridad) {
+            actual = actual->siguiente;
+        }
+        nuevo->siguiente = actual->siguiente;
+        actual->siguiente = nuevo; // Enlace en posición intermedia o final
+    }
+    cout << "[CPU] Proceso '" << nombre << "' (Prio: " << prioridad << ") encolado en espera.\n";
+}
+
+/**
+ * FUNCIÓN AUXILIAR: Reconstruye la cola de prioridad desde archivo de texto en modo silencioso.
+ */
+void encolarPrioridadCarga(NodoCola*& frente, int id, string nombre, int prioridad) {
+    NodoCola* nuevo = new NodoCola();
+    nuevo->idProceso = id;
+    nuevo->nombre = nombre;
+    nuevo->prioridad = prioridad;
+    nuevo->siguiente = NULL;
+
+    if (frente == NULL || prioridad > frente->prioridad) {
+        nuevo->siguiente = frente;
+        frente = nuevo;
+    } else {
+        NodoCola* actual = frente;
+        while (actual->siguiente != NULL && actual->siguiente->prioridad >= prioridad) {
+            actual = actual->siguiente;
+        }
+        nuevo->siguiente = actual->siguiente;
+        actual->siguiente = nuevo;
+    }
+}
+
+/**
+ * RF-07: Desencolado clásico (Atención del proceso en el Frente de la Cola).
+ */
+void desencolarCPU(NodoCola*& frente) {
+    if (frente == NULL) {
+        cout << "[ERROR] No hay procesos listos para ejecucion en la cola de CPU.\n";
+        return;
+    }
+    NodoCola* temp = frente; // Captura del elemento frontal
+    cout << "\n>>> SIMULANDO EJECUCION DE CPU <<<\n";
+    cout << "Ejecutando Proceso ID: " << temp->idProceso << " | Nombre: " << temp->nombre << "\n";
+    cout << "Prioridad Procesada: " << temp->prioridad << "\n";
+    
+    frente = frente->siguiente; // El segundo elemento pasa a ser el frente
+    delete temp; // Liberación del espacio del nodo atendido
+    cout << "[OK] Proceso finalizado y removido de la CPU.\n";
+}
+
+/**
+ * RF-08: Impresión secuencial del orden interno de despacho de la CPU.
+ */
+void mostrarColaCPU(NodoCola* frente) {
+    if (frente == NULL) {
+        cout << "\n[CPU] Cola de planificacion vacia. CPU en estado Idle (Inactivo).\n";
+        return;
+    }
+    cout << "\n=============================================\n";
+    cout << "      ORDEN DE PLANIFICACION DE CPU (H-L)    \n";
+    cout << "=============================================\n";
+    NodoCola* actual = frente;
+    int posicion = 1;
+    while (actual != NULL) {
+        cout << posicion << "o Atencion -> ID: " << actual->idProceso 
+             << " | Nombre: " << actual->nombre 
+             << " | Prioridad: " << actual->prioridad << "\n";
+        actual = actual->siguiente;
+        posicion++;
+    }
+    cout << "---------------------------------------------\n";
+}
+
+// ============================================================================
+// MÓDULO 3: GESTOR DE MEMORIA (PILA / STACK LIFO)
+// ============================================================================
+
+/**
+ * RF-09: Operación PUSH (Asignación y apilamiento de un bloque de memoria).
+ */
+void pushMemoria(NodoPila*& cima, int idProceso, int tamano) {
+    NodoPila* nuevo = new NodoPila();
+    nuevo->idProceso = idProceso;
+    nuevo->tamanoBloque = tamano;
+    nuevo->anterior = cima; // El puntero apunta hacia el elemento inferior (la antigua cima)
+
+    cima = nuevo; // La referencia externa cambia al nuevo nodo superior
+}
+
+/**
+ * RF-10: Operación POP (Liberación del último bloque direccionado en memoria).
+ */
+void popMemoria(NodoPila*& cima) {
+    if (cima == NULL) {
+        cout << "[ERROR] Fuga evitada: No hay bloques asignados en la pila de memoria.\n";
+        return;
+    }
+    NodoPila* temp = cima; // Captura del nodo superior (Cima)
+    cout << "\n>>> LIBERANDO ESPACIO DE DIRECCIONAMIENTO <<<\n";
+    cout << "Liberando bloque de " << temp->tamanoBloque << " KB del Proceso ID: " << temp->idProceso << "\n";
+    
+    cima = cima->anterior; // La cima desciende al elemento previo
+    delete temp; // Destrucción del nodo desapilado
+    cout << "[OK] Memoria reclamada por el Sistema Operativo.\n";
+}
+
+/**
+ * RF-11: Despliegue gráfico vertical del mapa de memoria RAM simulado.
+ */
+void mostrarPilaMemoria(NodoPila* cima) {
+    if (cima == NULL) {
+        cout << "\n[MEMORIA] Segmento de memoria limpio. 0 bloques asignados.\n";
+        return;
+    }
+    cout << "\n=============================================\n";
+    cout << "       MAPA DE ASIGNACION DE MEMORIA (PILA)  \n";
+    cout << "=============================================\n";
+    NodoPila* actual = cima;
+    while (actual != NULL) {
+        cout << "[ CIMA ] -> Proceso Propietario ID: " << actual->idProceso 
+             << " | Bloque: " << actual->tamanoBloque << " KB\n";
+        actual = actual->anterior; // Movimiento descendente hacia la base de la estructura
+    }
+    cout << "=================== BASE ====================\n";
+}
+
+// ============================================================================
+// PERSISTENCIA DE DATOS (LECTURA / ESCRITURA EN DISCO FISCO)
+// ============================================================================
+
+// Conversión explícita de flujos de texto a enteros
+int stringAInt(const string& str) {
+    stringstream ss(str);
+    int num;
+    ss >> num;
+    return num;
+}
+
+/**
+ * Serialización de datos: Exportación completa de las 3 estructuras a archivo plano.
+ */
+void guardarSistema(NodoProceso* cabeza, NodoCola* frente, NodoPila* cima) {
+    ofstream archivo("SGP_Data.txt");
+    if (!archivo) {
+        cout << "[ERROR] No se pudo crear el archivo de persistencia.\n";
+        return;
+    }
+
+    // Guardado delimitado por marcas del bloque del Gestor de Procesos
+    archivo << "---PROCESOS---\n";
+    NodoProceso* p = cabeza;
+    while (p != NULL) {
+        archivo << p->id << "," << p->nombre << "," << p->prioridad << "," << p->estado << "\n";
+        p = p->siguiente;
+    }
+
+    // Guardado delimitado de la Cola de Planificación de CPU
+    archivo << "---COLA---\n";
+    NodoCola* c = frente;
+    while (c != NULL) {
+        archivo << c->idProceso << "," << c->nombre << "," << c->prioridad << "\n";
+        c = c->siguiente;
+    }
+
+    // Guardado delimitado de la Pila de Memoria
+    archivo << "---PILA---\n";
+    NodoPila* m = cima;
+    while (m != NULL) {
+        archivo << m->idProceso << "," << m->tamanoBloque << "\n";
+        m = m->anterior;
+    }
+
+    archivo.close();
+    cout << "[PERSISTENCIA] Estado del sistema respaldado de forma segura en 'SGP_Data.txt'.\n";
+}
+
+/**
+ * Deserialización de datos: Reconstrucción volumétrica de estructuras al iniciar.
+ */
+void cargarSistema(NodoProceso*& cabeza, NodoCola*& frente, NodoPila*& cima) {
+    ifstream archivo("SGP_Data.txt");
+    if (!archivo) {
+        cout << "[INFO] No se encontro historial previo. Iniciando sistema limpio.\n";
+        return;
+    }
+
+    string linea;
+    string seccion = "";
+
+    // Parseo de líneas utilizando tokens comas ',' como criterio divisor
+    while (getline(archivo, linea)) {
+        if (linea.empty()) continue;
+        
+        if (linea == "---PROCESOS---" || linea == "---COLA---" || linea == "---PILA---") {
+            seccion = linea; // Cambio dinámico del contexto de lectura
+            continue;
+        }
+
+        if (seccion == "---PROCESOS---") {
+            size_t pos1 = linea.find(',');
+            size_t pos2 = linea.find(',', pos1 + 1);
+            size_t pos3 = linea.find(',', pos2 + 1);
+
+            int id = stringAInt(linea.substr(0, pos1));
+            string nombre = linea.substr(pos1 + 1, pos2 - pos1 - 1);
+            int prioridad = stringAInt(linea.substr(pos2 + 1, pos3 - pos2 - 1));
+            
+            NodoProceso* nuevo = new NodoProceso();
+            nuevo->id = id; nuevo->nombre = nombre; nuevo->prioridad = prioridad;
+            nuevo->estado = "Activo"; nuevo->siguiente = NULL;
+            if (cabeza == NULL) { cabeza = nuevo; } 
+            else {
+                NodoProceso* act = cabeza;
+                while (act->siguiente != NULL) act = act->siguiente;
+                act->siguiente = nuevo;
+            }
+        }
+        else if (seccion == "---COLA---") {
+            size_t pos1 = linea.find(',');
+            size_t pos2 = linea.find(',', pos1 + 1);
+
+            int id = stringAInt(linea.substr(0, pos1));
+            string nombre = linea.substr(pos1 + 1, pos2 - pos1 - 1);
+            int prioridad = stringAInt(linea.substr(pos2 + 1));
+
+            encolarPrioridadCarga(frente, id, nombre, prioridad);
+        }
+        else if (seccion == "---PILA---") {
+            size_t pos = linea.find(',');
+            int id = stringAInt(linea.substr(0, pos));
+            int tamano = stringAInt(linea.substr(pos + 1));
+
+            pushMemoria(cima, id, tamano);
+        }
+    }
+    archivo.close();
+    cout << "[PERSISTENCIA] Datos historicos restaurados con exito.\n";
+}
+
+// ============================================================================
+// INTERFACES DE MENÚS EN CONSOLA
+// ============================================================================
+
+void mostrarMenuPrincipal() {
+    cout << "\n==================================================\n";
+    cout << "     SISTEMA DE GESTION DE PROCESOS (SGP)        \n";
+    cout << "==================================================\n";
+    cout << "  1. Modulo: Gestor de Procesos (Lista)\n";
+    cout << "  2. Modulo: Planificador de CPU (Cola Prioridad)\n";
+    cout << "  3. Modulo: Gestor de Memoria (Pila)\n";
+    cout << "  4. Guardar Estado y Salir del Sistema\n";
+    cout << "==================================================\n";
+    cout << "Elija un modulo: ";
+}
+
+void mostrarSubMenuGestor() {
+    cout << "\n--------------------------------------------------\n";
+    cout << "          M_1: GESTOR DE PROCESOS\n";
+    cout << "--------------------------------------------------\n";
+    cout << "  1. Registrar Nuevo Proceso\n";
+    cout << "  2. Eliminar Proceso por ID\n";
+    cout << "  3. Eliminar Proceso por Nombre\n"; // RF-02 Sincronizado
+    cout << "  4. Buscar Proceso por ID\n";
+    cout << "  5. Buscar Proceso por Nombre\n";
+    cout << "  6. Modificar Prioridad de un Proceso\n";
+    cout << "  7. Listar Todos los Procesos\n";
+    cout << "  8. << Volver al Menu Principal\n";
+    cout << "--------------------------------------------------\n";
+    cout << "Elija una opcion: ";
+}
+
+void mostrarSubMenuCPU() {
+    cout << "\n--------------------------------------------------\n";
+    cout << "          M_2: PLANIFICADOR DE CPU\n";
+    cout << "--------------------------------------------------\n";
+    cout << "  1. Encolar Proceso en Espera de CPU\n";
+    cout << "  2. Desencolar y Ejecutar Mayor Prioridad\n";
+    cout << "  3. Ver Cola de Planificacion de CPU\n";
+    cout << "  4. << Volver al Menu Principal\n";
+    cout << "--------------------------------------------------\n";
+    cout << "Elija una opcion: ";
+}
+
+void mostrarSubMenuMemoria() {
+    cout << "\n--------------------------------------------------\n";
+    cout << "          M_3: GESTOR DE MEMORIA\n";
+    cout << "--------------------------------------------------\n";
+    cout << "  1. Asignar Bloque de Memoria (Push)\n";
+    cout << "  2. Liberar Ultimo Bloque Asignado (Pop)\n";
+    cout << "  3. Ver Mapa de Pila de Memoria\n";
+    cout << "  4. << Volver al Menu Principal\n";
+    cout << "--------------------------------------------------\n";
+    cout << "Elija una opcion: ";
+}
+
+// ============================================================================
+// FUNCIÓN PRINCIPAL / CONTROLADOR GENERAL DEL SISTEMA
+// ============================================================================
+int main() {
+    // Inicialización del entorno de punteros globales de control
+    NodoProceso* gestorProcesos = NULL;
+    NodoCola* planificadorCPU = NULL;
+    NodoPila* gestorMemoria = NULL;
+
+    // Recuperación de datos persistentes al arranque
+    cargarSistema(gestorProcesos, planificadorCPU, gestorMemoria);
+
+    int opPrincipal, opSub;
+    int id, prioridad, tamano;
+    string nombre;
+
+    do {
+        mostrarMenuPrincipal();
+        if (!(cin >> opPrincipal)) {
+            cout << "[ERROR] Entrada invalida. Ingrese un numero.\n";
+            cin.clear(); cin.ignore(10000, '\n');
+            continue;
+        }
+
+        switch (opPrincipal) {
+            case 1: // SUBMENÚ DEL MÓDULO 1: GESTOR DE PROCESOS
+                do {
+                    mostrarSubMenuGestor();
+                    if (!(cin >> opSub)) {
+                        cout << "[ERROR] Entrada invalida.\n";
+                        cin.clear(); cin.ignore(10000, '\n');
+                        opSub = 0; continue;
+                    }
+                    
+                    if (opSub == 1) { // Registrar Proceso
+                        do {
+                            cout << "Ingrese ID del Proceso (Entero Mayor a 0): "; cin >> id;
+                            if (id <= 0) cout << "[ERROR] El ID debe ser estrictamente positivo.\n";
+                        } while (id <= 0);
+
+                        cin.ignore();
+                        do {
+                            cout << "Ingrese Nombre del Proceso: "; 
+                            getline(cin, nombre);
+                            if (nombre.empty()) cout << "[ERROR] El nombre no puede quedar vacio.\n";
+                        } while (nombre.empty());
+
+                        do {
+                            cout << "Ingrese Nivel de Prioridad (1:Baja - 5:Critica): "; cin >> prioridad;
+                            if (prioridad < 1 || prioridad > 5) cout << "[ERROR] Prioridad invalida. Rango de 1 a 5.\n";
+                        } while (prioridad < 1 || prioridad > 5);
+
+                        insertarProceso(gestorProcesos, id, nombre, prioridad);
+                    } 
+                    else if (opSub == 2) { // Eliminar por ID
+                        cout << "Ingrese el ID del proceso a eliminar: "; cin >> id;
+                        eliminarProcesoPorID(gestorProcesos, id);
+                    } 
+                    else if (opSub == 3) { // CORREGIDO: Eliminar por Nombre mapeado a opción 3
+                        cout << "Ingrese el NOMBRE del proceso a eliminar: "; cin.ignore(); getline(cin, nombre);
+                        eliminarProcesoPorNombre(gestorProcesos, nombre);
+                    }
+                    else if (opSub == 4) { // CORREGIDO: Buscar por ID mapeado a opción 4
+                        cout << "Ingrese el ID del proceso a buscar: "; cin >> id;
+                        buscarProcesoPorID(gestorProcesos, id);
+                    } 
+                    else if (opSub == 5) { // CORREGIDO: Buscar por Nombre mapeado a opción 5
+                        cout << "Ingrese el NOMBRE del proceso a buscar: "; cin.ignore(); getline(cin, nombre);
+                        buscarProcesoPorNombre(gestorProcesos, nombre);
+                    } 
+                    else if (opSub == 6) { // CORREGIDO: Modificar prioridad mapeado a opción 6
+                        cout << "Ingrese el ID del proceso a modificar: "; cin >> id;
+                        do {
+                            cout << "Ingrese la Nueva Prioridad (1-5): "; cin >> prioridad;
+                            if (prioridad < 1 || prioridad > 5) cout << "[ERROR] Rango invalido (1-5).\n";
+                        } while (prioridad < 1 || prioridad > 5);
+                        
+                        modificarPrioridad(gestorProcesos, id, prioridad);
+                    } 
+                    else if (opSub == 7) { // CORREGIDO: Listar mapeado a opción 7
+                        listarProcesos(gestorProcesos);
+                    } 
+                    else if (opSub != 8) {
+                        cout << "[ERROR] Opcion invalida en el modulo.\n";
+                    }
+                } while (opSub != 8);
+                break;
+
+            case 2: // SUBMENÚ DEL MÓDULO 2: PLANIFICADOR DE CPU
+                do {
+                    mostrarSubMenuCPU();
+                    if (!(cin >> opSub)) {
+                        cout << "[ERROR] Entrada invalida.\n";
+                        cin.clear(); cin.ignore(10000, '\n');
+                        opSub = 0; continue;
+                    }
+                    if (opSub == 1) {
+                        cout << "Ingrese el ID del proceso registrado que va a la CPU: "; cin >> id;
+                        NodoProceso* aux = gestorProcesos;
+                        bool hallado = false;
+                        while (aux != NULL) {
+                            if (aux->id == id) {
+                                encolarPrioridad(planificadorCPU, aux->id, aux->nombre, aux->prioridad);
+                                hallado = true; break;
+                            }
+                            aux = aux->siguiente;
+                        }
+                        if (!hallado) cout << "[ERROR] El ID " << id << " no existe en el Modulo 1. Registrelo primero.\n";
+                    } else if (opSub == 2) {
+                        desencolarCPU(planificadorCPU);
+                    } else if (opSub == 3) {
+                        mostrarColaCPU(planificadorCPU);
+                    } else if (opSub != 4) {
+                        cout << "[ERROR] Opcion invalida en el modulo.\n";
+                    }
+                } while (opSub != 4);
+                break;
+
+            case 3: // SUBMENÚ DEL MÓDULO 3: GESTOR DE MEMORIA
+                do {
+                    mostrarSubMenuMemoria();
+                    if (!(cin >> opSub)) {
+                        cout << "[ERROR] Entrada invalida.\n";
+                        cin.clear(); cin.ignore(10000, '\n');
+                        opSub = 0; continue;
+                    }
+                    if (opSub == 1) {
+                        cout << "Ingrese el ID del proceso solicitante: "; cin >> id;
+                        do {
+                            cout << "Cantidad de memoria a reservar (en KB - Mayor a 0): "; cin >> tamano;
+                            if (tamano <= 0) cout << "[ERROR] El espacio en memoria debe ser una cantidad positiva.\n";
+                        } while (tamano <= 0);
+                        
+                        // Control preventivo de contexto cruzado antes de apilar
+                        {
+                            NodoProceso* aux = gestorProcesos;
+                            bool hallado = false;
+                            while(aux != NULL){
+                                if(aux->id == id) { hallado = true; break; }
+                                aux = aux->siguiente;
+                            }
+                            if(hallado) {
+                                pushMemoria(gestorMemoria, id, tamano);
+                                cout << "[MEMORIA] Asignados " << tamano << " KB al Proceso ID: " << id << ".\n";
+                            } else {
+                                cout << "[ERROR] No se puede asignar memoria. El Proceso ID " << id << " no existe en el Modulo 1.\n";
+                            }
+                        }
+                    } else if (opSub == 2) {
+                        popMemoria(gestorMemoria);
+                    } else if (opSub == 3) {
+                        mostrarPilaMemoria(gestorMemoria);
+                    } else if (opSub != 4) {
+                        cout << "[ERROR] Opcion invalida en el modulo.\n";
+                    }
+                } while (opSub != 4);
+                break;
+
+            case 4: // CIERRE CONTROLADO
+                guardarSistema(gestorProcesos, planificadorCPU, gestorMemoria);
+                cout << "\n[SGP] Guardando dependencias y cerrando el Simulador. ¡Exito!\n";
+                break;
+
+            default:
+                cout << "[ERROR] Modulo no reconocido. Intente del 1 al 4.\n";
+        }
+    } while (opPrincipal != 4);
+
+    // ============================================================================
+    // RECOLECCIÓN DE BASURA AL SALIR (LIBERACIÓN EXPLICITA DE MEMORIA EN HEAP)
+    // ============================================================================
+    while(gestorProcesos != NULL) {
+        NodoProceso* t = gestorProcesos;
+        gestorProcesos = gestorProcesos->siguiente;
+        delete t;
+    }
+    while(planificadorCPU != NULL) {
+        NodoCola* t = planificadorCPU;
+        planificadorCPU = planificadorCPU->siguiente;
+        delete t;
+    }
+    while(gestorMemoria != NULL) {
+        NodoPila* t = gestorMemoria;
+        gestorMemoria = gestorMemoria->anterior;
+        delete t;
+    }
+
+    return 0;
+}
